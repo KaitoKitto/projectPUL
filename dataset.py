@@ -266,12 +266,28 @@ class DataSet(object):
         Return:
             None
         '''
+
+        '''
         assert self.name != ''
         assert self.save_path != ''
         pickle.dump(self, open(self.save_path + 'DataSet_' +
-                                     self.name + '.pkl', 'wb'), True)
+                               self.name + '.pkl', 'wb'), True)
         self._save_info()
         print('dataset ', self.name, ' has benn saved\n')
+        '''
+
+
+        assert self.name != ''
+        assert self.save_path != ''
+        filename = self.save_path + 'DataSet_' + self.name + '.pkl'
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, 'wb') as f:
+            pickle.dump(self, f, 0)
+
+        self._save_info()
+        print('dataset ', self.name, ' has benn saved\n')
+
+
 
     def _save_info(self):
         '''
@@ -290,9 +306,9 @@ class DataSet(object):
             if isinstance(info[attr][0],np.ndarray) and len(info[attr][0])>1:
                 for i,x in enumerate(info[attr]):
                     info[attr][i] = x.shape
-            if not isinstance(info[attr][0],str) and len(info[attr][0]) > 2:
+            if not isinstance(info[attr][0],str) and len(str(info[attr][0])) > 2: # and len(info[attr][0]) > 2:
                 for i,x in enumerate(info[attr]):
-                    info[attr][i] = len(x)
+                    info[attr][i] = len(str(x))
 
         pd.DataFrame(info).to_csv(self.save_path + 'DataSet_' + self.name + 'info.csv',index=False)
 
@@ -342,7 +358,7 @@ def make_phm_dataset():
                 'Bearing3_3':82}
     phm_dataset = DataSet(name='phm_data',
                         index=['bearing_name','RUL','quantity','data'])
-    source_path = './PHM/'
+    source_path = './phm/'
     for path_1 in ['Learning_set/','Test_set/']:
         bearings_names = os.listdir(source_path + path_1)
         bearings_names.sort()
@@ -380,7 +396,7 @@ def make_paderborn_dataset():
             'data'
         ]
     )
-    source_path = 'E:/cyh/data_sum/temp/德data/dataset/'
+    source_path = 'C:/Users/ZHU/Desktop/phm-ieee-2012-data-challenge-dataset-master/Learning_set/Bearing2_1'
     artificial_fault = ['KI01','KI03','KI05','KI07','KI08',
                 'KA01','KA03','KA05','KA06','KA07']
     state = {
@@ -487,10 +503,10 @@ def make_ims_dataset():
 
 
 if __name__ == '__main__':
-    # make_phm_dataset()
-    # dataset = DataSet.load_dataset('phm_data')
-    # dataset._save_info()
+    make_phm_dataset()
+    dataset = DataSet.load_dataset('phm_data')
+    dataset._save_info()
     # make_paderborn_dataset()
     # make_ims_dataset()
-    dataset = DataSet.load_dataset('ims_data')
+    # dataset = DataSet.load_dataset('ims_data')
     print('1')

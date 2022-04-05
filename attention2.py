@@ -12,6 +12,10 @@ import torch.nn.functional as F
 from torch.nn.utils import clip_grad_norm_
 from torchnet.logger import VisdomPlotLogger, VisdomLogger
 from dataset import DataSet
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# import os
+# os.environ['http_proxy'] = 'http://127.0.0.1:1080'
+# os.environ['https_proxy'] = 'https://127.0.0.1:1080'
 
 '''
     TODO: 
@@ -136,14 +140,16 @@ class Seq2Seq(nn.Module):
         batch_size = src.size(1)
         max_len = trg.size(0)
         vocab_size = self.decoder.output_size
-        outputs = Variable(torch.zeros(max_len, batch_size, vocab_size)).cuda()
+        # outputs = Variable(torch.zeros(max_len, batch_size, vocab_size)).cuda()
+        outputs = Variable(torch.zeros(max_len, batch_size, vocab_size)).to(device)
 
         encoder_output, hidden = self.encoder(src)
         hidden = hidden[:self.decoder.n_layers]
         if teacher_forcing_ratio == None:
             teacher_forcing_ratio = self.teacher_forcing_ratio
         is_teacher = random.random() < teacher_forcing_ratio
-        output = Variable(trg.data[0,] if is_teacher else outputs[0,]).cuda()
+        # output = Variable(trg.data[0,] if is_teacher else outputs[0,]).cuda()
+        output = Variable(trg.data[0,] if is_teacher else outputs[0,]).to(device)
         if is_analyse:
             analyse_data = OrderedDict()
             analyse_data['fea_after_encoder'] = encoder_output.data.cpu().numpy()
@@ -153,7 +159,8 @@ class Seq2Seq(nn.Module):
                     output, hidden, encoder_output)
             outputs[t] = output
             is_teacher = random.random() < teacher_forcing_ratio
-            output = Variable(trg.data[t,] if is_teacher else output).cuda()
+            # output = Variable(trg.data[t,] if is_teacher else output).cuda()
+            output = Variable(trg.data[t,] if is_teacher else output).to(device)
             if is_analyse:
                 analyse_data['atten'].append(attn_weights.data.cpu().numpy())
         if is_analyse:
@@ -166,7 +173,7 @@ class Seq2Seq(nn.Module):
 class RUL():
     def __init__(self):
         self.hidden_size = 200
-        self.epochs = 1000
+        self.epochs = 10
         self.lr = 4e-3
         self.gama = 0.7
         self.strides = 5
@@ -188,7 +195,8 @@ class RUL():
 
         encoder = Encoder(self.feature_size,self.hidden_size,self.en_cnn_k_s,self.strides,n_layers=1,dropout=0.5)
         decoder = Decoder(self.hidden_size,1,n_layers=1,dropout=0.3)
-        seq2seq = Seq2Seq(encoder,decoder).cuda()
+        # seq2seq = Seq2Seq(encoder,decoder).cuda()
+        seq2seq = Seq2Seq(encoder, decoder).to(device)
         # seq2seq = torch.load('./model/newest_seq2seq')
         seq2seq.teacher_forcing_ratio = 0.3
         optimizer = optim.Adam(seq2seq.parameters(), lr=self.lr)
@@ -301,8 +309,10 @@ class RUL():
             for [data, label] in train_iter:
                 data, label = torch.from_numpy(data.copy()), torch.from_numpy(label.copy())
                 data, label = data.type(torch.FloatTensor), label.type(torch.FloatTensor)
-                data = Variable(data).cuda()
-                label = Variable(label).cuda()
+                # data = Variable(data).cuda()
+                data = Variable(data).to(device)
+                # label = Variable(label).cuda()
+                label = Variable(label).to(device)
                 output, temp_analyse_data = seq2seq(data, label, teacher_forcing_ratio=0.0, is_analyse=True)
                 analyse_data['train_result'].append(output.data.cpu().numpy())
                 analyse_data['train_fea_after_encoder'].append(temp_analyse_data['fea_after_encoder'])
@@ -316,8 +326,10 @@ class RUL():
             for [data, label] in val_iter:
                 data, label = torch.from_numpy(data.copy()), torch.from_numpy(label.copy())
                 data, label = data.type(torch.FloatTensor), label.type(torch.FloatTensor)
-                data = Variable(data).cuda()
-                label = Variable(label).cuda()
+                # data = Variable(data).cuda()
+                data = Variable(data).to(device)
+                # label = Variable(label).cuda()
+                label = Variable(label).to(device)
                 output, temp_analyse_data = seq2seq(data, label, teacher_forcing_ratio=0.0, is_analyse=True)
                 analyse_data['test_result'].append(output.data.cpu().numpy())
                 analyse_data['test_fea_after_encoder'].append(temp_analyse_data['fea_after_encoder'])
@@ -333,8 +345,10 @@ class RUL():
             with torch.no_grad():
                 data, label = torch.from_numpy(data.copy()), torch.from_numpy(label.copy())
                 data, label = data.type(torch.FloatTensor), label.type(torch.FloatTensor)
-                data = Variable(data).cuda()
-                label = Variable(label).cuda()
+                # data = Variable(data).cuda()
+                data = Variable(data).to(device)
+                # label = Variable(label).cuda()
+                label = Variable(label).to(device)
                 output = model(data, label, teacher_forcing_ratio=0.0)
                 if cal_er:
                     label_n = label.data.cpu().numpy().reshape(-1,)
@@ -367,7 +381,8 @@ class RUL():
             data, label = data[random_idx*self.strides:,], label[random_idx:,]
             data, label = torch.from_numpy(data.copy()), torch.from_numpy(label.copy())
             data, label = data.type(torch.FloatTensor), label.type(torch.FloatTensor)
-            data, label = Variable(data).cuda(), Variable(label).cuda()
+            # data, label = Variable(data).cuda(), Variable(label).cuda()
+            data, label = Variable(data).to(device), Variable(label).to(device)
             optimizer.zero_grad()
             output = model(data, label)
             loss = F.mse_loss(output,label)
@@ -376,7 +391,8 @@ class RUL():
             clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
             total_loss += loss.data
-            torch.cuda.empty_cache()        #empty useless variable
+            # torch.cuda.empty_cache()        #empty useless variable
+            # torch.empty_cache().to(device)
         return total_loss / len(train_iter)
 
 
@@ -389,8 +405,10 @@ class RUL():
             for [data, label] in train_iter:
                 data, label = torch.from_numpy(data.copy()), torch.from_numpy(label.copy())
                 data, label = data.type(torch.FloatTensor), label.type(torch.FloatTensor)
-                data = Variable(data).cuda()
-                label = Variable(label).cuda()
+                # data = Variable(data).cuda()
+                data = Variable(data).to(device)
+                # label = Variable(label).cuda()
+                label = Variable(label).to(device)
                 output = model(data, label, teacher_forcing_ratio=0.0)
                 labels.append(label.data.cpu().numpy())
                 outputs.append(output.data.cpu().numpy())
@@ -407,8 +425,10 @@ class RUL():
             for [data, label] in val_iter:
                 data, label = torch.from_numpy(data.copy()), torch.from_numpy(label.copy())
                 data, label = data.type(torch.FloatTensor), label.type(torch.FloatTensor)
-                data = Variable(data).cuda()
-                label = Variable(label).cuda()
+                # data = Variable(data).cuda()
+                data = Variable(data).to(device)
+                # label = Variable(label).cuda()
+                label = Variable(label).to(device)
                 output = model(data, label, teacher_forcing_ratio=0.0)
                 labels.append(label.data.cpu().numpy())
                 outputs.append(output.data.cpu().numpy())

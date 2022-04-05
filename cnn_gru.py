@@ -7,6 +7,8 @@ import keras.layers as KL
 from keras import backend as K
 import tensorflow as tf 
 import keras.backend.tensorflow_backend as KTF
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 class CNN_GRU():
     def __init__(self):
@@ -71,7 +73,8 @@ class CNN_GRU():
         train_data = np.array([])
         train_label = np.array([])
         for i,x in enumerate(temp_label):
-            t_label = [y for y in range(x,x + temp_data[i].shape[0])]
+            # t_label = [y for y in range(x,x + temp_data[i].shape[0])]
+            t_label = [y for y in np.arange(x, x + temp_data[i].shape[0])]
             t_label.reverse()
             if train_data.size == 0:
                 train_data = temp_data[i]
@@ -150,8 +153,9 @@ class CNN_GRU():
 
         plt.plot(c_test_label)
         plt.scatter([x for x in range(predict_label.shape[0])],predict_label)
+        plt.show()
 
 if __name__ == '__main__':
-    KTF.set_session(tf.Session(config=tf.ConfigProto(device_count={'gpu':0})))
+    KTF.set_session(tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(device_count={'gpu':0})))
     process = CNN_GRU()
     process.test_cnn()

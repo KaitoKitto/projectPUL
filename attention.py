@@ -11,6 +11,9 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from torch.nn.utils import clip_grad_norm_
 from dataset import DataSet
+import os
+
+device = torch.device("cuda"if torch.cuda.is_available() else "cpu")
 
 '''
     TODO: 
@@ -79,7 +82,8 @@ class Attention(nn.Module):
             if l == timestep:
                 temp_atten = F.softmax(attn_energies[i:i+1,],dim=1)
             else:
-                temp_atten = torch.cat([F.softmax(attn_energies[i:i+1,:l],dim=1),Variable(torch.zeros(1,timestep-l)).cuda()],1)
+                # temp_atten = torch.cat([F.softmax(attn_energies[i:i+1,:l],dim=1),Variable(torch.zeros(1,timestep-l)).cuda()],1)
+                temp_atten = torch.cat([F.softmax(attn_energies[i:i + 1, :l], dim=1), Variable(torch.zeros(1, timestep - l)).to(device)], 1)
             new_atten.append(temp_atten)
         new_atten = torch.cat(new_atten,0)
         return new_atten.unsqueeze(1)
@@ -137,7 +141,8 @@ class Seq2Seq(nn.Module):
         batch_size = trg.size(1)
         max_len = trg.size(0)
         vocab_size = self.decoder.output_size
-        outputs = Variable(torch.zeros(max_len, batch_size, vocab_size)).cuda()
+        # outputs = Variable(torch.zeros(max_len, batch_size, vocab_size)).cuda()
+        outputs = Variable(torch.zeros(max_len, batch_size, vocab_size)).to(device)
 
         encoder_output, hidden = self.encoder(src, len_seq)
         hidden = hidden[:self.decoder.n_layers]
@@ -154,7 +159,8 @@ class Seq2Seq(nn.Module):
             if teacher_forcing_ratio == None:
                 teacher_forcing_ratio = self.teacher_forcing_ratio
             is_teacher = random.random() < teacher_forcing_ratio
-            output = Variable(trg.data[t,] if is_teacher else output).cuda()
+            # output = Variable(trg.data[t,] if is_teacher else output).cuda()
+            output = Variable(trg.data[t,] if is_teacher else output).to(device)
             if is_analyse:
                 analyse_data['atten'].append(attn_weights.data.cpu().numpy())
         if is_analyse:
@@ -178,6 +184,8 @@ class RUL():
 
     
     def train(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         train_data,train_label = self._preprocess('train')
         train_iter = [[train_data[i],train_label[i]] for i in range(len(train_data))]
         test_data,test_label = self._preprocess('test')
@@ -185,7 +193,8 @@ class RUL():
 
         encoder = Encoder(self.feature_size,self.hidden_size,n_layers=2,dropout=0.5)
         decoder = Decoder(self.hidden_size,1,n_layers=2,dropout=0.5)
-        seq2seq = Seq2Seq(encoder,decoder).cuda()
+        # seq2seq = Seq2Seq(encoder,decoder).cuda()
+        seq2seq = Seq2Seq(encoder, decoder).to(device)
         # seq2seq = torch.load('./model/newest_seq2seq')
         seq2seq.teacher_forcing_ratio = 0.3
         optimizer = optim.Adam(seq2seq.parameters(), lr=self.lr)
@@ -211,7 +220,15 @@ class RUL():
             log['val_loss'].append(float(val_loss))
             log['test_loss'].append(float(test_loss))
             log['teacher_ratio'].append(seq2seq.teacher_forcing_ratio)
+
+            '''
             pd.DataFrame(log).to_csv('./model/log.csv',index=False)
+            '''
+            filename = './model/log.csv'
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            with open(filename, 'wb') as f:
+                pd.DataFrame(log).to_csv('./model/log.csv',index=False)
+
             if float(val_loss) == min(log['val_loss']):
                 torch.save(seq2seq, './model/seq2seq')
             torch.save(seq2seq, './model/newest_seq2seq')
@@ -262,9 +279,12 @@ class RUL():
             for [data, label] in train_iter:
                 data, label = torch.from_numpy(data.copy()), torch.from_numpy(label.copy())
                 data, label = data.type(torch.FloatTensor), label.type(torch.FloatTensor)
-                data = Variable(data).cuda()
-                label = Variable(label).cuda()
-                output, temp_analyse_data = seq2seq(data, label, teacher_forcing_ratio=0.0, is_analyse=True)
+                # data = Variable(data).cuda()
+                data = Variable(data).to(device)
+                # label = Variable(label).cuda()
+                label = Variable(label).to(device)
+                # output, temp_analyse_data = seq2seq(data, label, teacher_forcing_ratio=0.0, is_analyse=True)
+                output, temp_analyse_data = seq2seq(data, label, len_seq=[label.size(0)], teacher_forcing_ratio=0.0, is_analyse=True)
                 analyse_data['train_result'].append(output.data.cpu().numpy())
                 analyse_data['train_fea_after_encoder'].append(temp_analyse_data['fea_after_encoder'])
                 analyse_data['train_atten'].append(temp_analyse_data['atten'])
@@ -277,9 +297,11 @@ class RUL():
             for [data, label] in val_iter:
                 data, label = torch.from_numpy(data.copy()), torch.from_numpy(label.copy())
                 data, label = data.type(torch.FloatTensor), label.type(torch.FloatTensor)
-                data = Variable(data).cuda()
-                label = Variable(label).cuda()
-                output, temp_analyse_data = seq2seq(data, label, teacher_forcing_ratio=0.0, is_analyse=True)
+                # data = Variable(data).cuda()
+                data = Variable(data).to(device)
+                # label = Variable(label).cuda()
+                label = Variable(label).to(device)
+                output, temp_analyse_data = seq2seq(data, label, len_seq=[label.size(0)], teacher_forcing_ratio=0.0, is_analyse=True)
                 analyse_data['test_result'].append(output.data.cpu().numpy())
                 analyse_data['test_fea_after_encoder'].append(temp_analyse_data['fea_after_encoder'])
                 analyse_data['test_atten'].append(temp_analyse_data['atten'])
@@ -301,8 +323,10 @@ class RUL():
             with torch.no_grad():
                 data, label = torch.from_numpy(data.copy()), torch.from_numpy(label.copy())
                 data, label = data.type(torch.FloatTensor), label.type(torch.FloatTensor)
-                data = Variable(data).cuda()
-                label = Variable(label).cuda()
+                # data = Variable(data).cuda()
+                data = Variable(data).to(device)
+                # label = Variable(label).cuda()
+                label = Variable(label).to(device)
                 output = model(data, label, len_seq=[label.size(0)], teacher_forcing_ratio=0.0)
             loss = F.mse_loss(output,label)
             total_loss += loss.data
@@ -342,7 +366,8 @@ class RUL():
 
         train_data, train_label = torch.from_numpy(train_data), torch.from_numpy(train_label)
         train_data, train_label = train_data.type(torch.FloatTensor), train_label.type(torch.FloatTensor)
-        train_data, train_label = Variable(train_data).cuda(), Variable(train_label).cuda()
+        # train_data, train_label = Variable(train_data).cuda(), Variable(train_label).cuda()
+        train_data, train_label = Variable(train_data).to(device), Variable(train_label).to(device)
         optimizer.zero_grad()
         output = model(train_data, train_label, sorted_len_seq)
         # loss = F.mse_loss(output, train_label)
@@ -362,9 +387,12 @@ class RUL():
             for [data, label] in train_iter:
                 data, label = torch.from_numpy(data.copy()), torch.from_numpy(label.copy())
                 data, label = data.type(torch.FloatTensor), label.type(torch.FloatTensor)
-                data = Variable(data).cuda()
-                label = Variable(label).cuda()
-                output = model(data, label, teacher_forcing_ratio=0.0)
+                # data = Variable(data).cuda()
+                data = Variable(data).to(device)
+                # label = Variable(label).cuda()
+                label = Variable(label).to(device)
+                # output = model(data, label,  teacher_forcing_ratio=0.0)
+                output = model(data, label, len_seq=[label.size(0)], teacher_forcing_ratio=0.0)
                 labels.append(label.data.cpu().numpy())
                 outputs.append(output.data.cpu().numpy())
         labels = np.concatenate(tuple(x for x in labels), axis=0)
@@ -380,9 +408,12 @@ class RUL():
             for [data, label] in val_iter:
                 data, label = torch.from_numpy(data.copy()), torch.from_numpy(label.copy())
                 data, label = data.type(torch.FloatTensor), label.type(torch.FloatTensor)
-                data = Variable(data).cuda()
-                label = Variable(label).cuda()
-                output = model(data, label, teacher_forcing_ratio=0.0)
+                # data = Variable(data).cuda()
+                data = Variable(data).to(device)
+                # label = Variable(label).cuda()
+                label = Variable(label).to(device)
+                # output = model(data, label, teacher_forcing_ratio=0.0)
+                output = model(data, label, len_seq=[label.size(0)], teacher_forcing_ratio=0.0)
                 labels.append(label.data.cpu().numpy())
                 outputs.append(output.data.cpu().numpy())
         labels = np.concatenate(tuple(x for x in labels), axis=0)
